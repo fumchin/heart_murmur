@@ -13,10 +13,10 @@ from sklearn.model_selection import train_test_split
 
 
 
-def preprocess(audio_file_list, saved_path, sr, frame_length, hop_length):
+def preprocess(audio_file_list, saved_path, sr, mel_num, hop_length):
     for count, audio_file in enumerate(tqdm(audio_file_list)):
         y, sr = librosa.load(audio_file, sr=sr)
-        S = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=frame_length, hop_length=hop_length)
+        S = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=mel_num, hop_length=hop_length)
         scaler = MinMaxScaler(feature_range=(0, 1)).fit(S)
         S_scaled = scaler.transform(S)
         file_name = os.path.splitext(os.path.basename(audio_file))[0]
@@ -35,7 +35,7 @@ if __name__ == '__main__':
     if not os.path.exists(os.path.join(preprocess_path)):
         os.makedirs(preprocess_path)
 
-        preprocess(audio_file_list = audio_file_list, saved_path = preprocess_path, sr = cfg.sr, frame_length=cfg.frame_length, hop_length=cfg.hop_length)
+        preprocess(audio_file_list = audio_file_list, saved_path = preprocess_path, sr = cfg.sr, mel_num=cfg.mel_num, hop_length=cfg.hop_length)
         feature_file_list = glob(os.path.join(preprocess_path, '*.npy'))
     else:
         feature_file_list = glob(os.path.join(preprocess_path, '*.npy'))
@@ -46,7 +46,7 @@ if __name__ == '__main__':
     position_list = []
     # read feature file
     features = None
-    frame_length = 256
+    frame_length = cfg.frame_length
     for count, feature_file in (enumerate(tqdm(feature_file_list))):
         current_feature = np.load(feature_file)[:, :frame_length]
         if(current_feature.shape[1] < frame_length):
@@ -63,8 +63,8 @@ if __name__ == '__main__':
         else:
             # len = min(len, current_feature.shape[1])
             features = np.vstack((features, current_feature))
-        if count == 2000:
-            break
+        # if count == 1000:
+        #     break
     X_train, X_test, y_train, y_test = train_test_split(features, position_list, test_size=0.2, random_state=0)
     classifier = SVC(verbose=True)
     classifier.fit(X=X_train, y=y_train)
