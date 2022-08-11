@@ -39,8 +39,6 @@ if __name__ == '__main__':
         feature_file_list = glob(os.path.join(preprocess_path, '*.npy'))
     else:
         feature_file_list = glob(os.path.join(preprocess_path, '*.npy'))
-        # print(feature_file_list)
-        # feature_file_list = glob(preprocess_path+'\*')
 
 
     position_list = []
