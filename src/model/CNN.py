@@ -1,57 +1,84 @@
+import torch.nn as nn
 import torch
-from torch import nn
-# from .. import config as cfg
-from torchsummary import summary
 
-class Cnn_Test(nn.Module):
-    def __init__(self):
-        super().__init__()
-        # input shape = (1, 256, 256)
-        
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=16, kernel_size=5, stride=1, padding=2) # output_shape = (16, 256, 256)
-        self.relu1 = nn.ReLU() # activation
-        
-        self.maxpool1 = nn.MaxPool2d(kernel_size=2) # output_shape = (16, 128, 128)
-        
-        self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=5, stride=1, padding=2) #output_shape = (32,128,128)
-        self.relu2 = nn.ReLU() # activation
-        
-        self.maxpool2 = nn.MaxPool2d(kernel_size=2) # output_shape = (32, 64, 64)
-        
-        self.conv3 = nn.Conv2d(in_channels=32, out_channels=16, kernel_size=5, stride=1, padding=2) #output_shape = (16,64,64)
-        self.relu3 = nn.ReLU() # activation
-        
-        self.maxpool3 = nn.MaxPool2d(kernel_size=2) # output_shape = (16, 32, 32)
-        
-        self.conv4 = nn.Conv2d(in_channels=16, out_channels=8, kernel_size=5, stride=1, padding=2) #output_shape = (8,64,64)
-        self.relu4 = nn.ReLU() # activation
-        
-        self.maxpool4 = nn.MaxPool2d(kernel_size=2) # output_shape = (8, 16, 16)
-        self.flatten =nn.Flatten()
-        self.fc1 = nn.Linear(8 * 16 * 16, 512) 
-        self.relu5 = nn.ReLU() # activation
-        self.fc2 = nn.Linear(512, 4) 
-        self.output = nn.Softmax(dim=1)
-        
-    def forward(self, input):
-        x = self.conv1(input)
-        x = self.relu1(x)
-        x = self.maxpool1(x)# Max pool 1
-        x = self.conv2(x) # Convolution 2
-        x = self.relu2(x) 
-        x = self.maxpool2(x) # Max pool 2
-        x = self.conv3(x) # Convolution 3
-        x = self.relu3(x)
-        x = self.maxpool3(x) # Max pool 3
-        x = self.conv4(x) # Convolution 4
-        x = self.relu4(x)
-        x = self.maxpool4(x) # Max pool 4
-        x = self.flatten(x)
-        x = self.fc1(x) # Linear function (readout)
-        x = self.fc2(x)
-        predictions = self.output(x)
-        return predictions
 
-if __name__ == '__main__':
-    model = Cnn_Test()
-    summary(model.cuda(), (1, 256, 256))
+class GLU(nn.Module):
+    def __init__(self, input_num):
+        super(GLU, self).__init__()
+        self.sigmoid = nn.Sigmoid()
+        self.linear = nn.Linear(input_num, input_num)
+
+    def forward(self, x):
+        lin = self.linear(x.permute(0, 2, 3, 1))
+        lin = lin.permute(0, 3, 1, 2)
+        sig = self.sigmoid(x)
+        res = lin * sig
+        return res
+
+
+class ContextGating(nn.Module):
+    def __init__(self, input_num):
+        super(ContextGating, self).__init__()
+        self.sigmoid = nn.Sigmoid()
+        self.linear = nn.Linear(input_num, input_num)
+
+    def forward(self, x):
+        lin = self.linear(x.permute(0, 2, 3, 1))
+        lin = lin.permute(0, 3, 1, 2)
+        sig = self.sigmoid(lin)
+        res = x * sig
+        return res
+
+
+class CNN(nn.Module):
+
+    def __init__(self, n_in_channel, activation="Relu", conv_dropout=0,
+                 kernel_size=[3, 3, 3], padding=[1, 1, 1], stride=[1, 1, 1], nb_filters=[64, 64, 64],
+                 pooling=[(1, 4), (1, 4), (1, 4)]
+                 ):
+        super(CNN, self).__init__()
+        self.nb_filters = nb_filters
+        cnn = nn.Sequential()
+
+        def conv(i, batchNormalization=False, dropout=None, activ="relu"):
+            nIn = n_in_channel if i == 0 else nb_filters[i - 1]
+            nOut = nb_filters[i]
+            cnn.add_module('conv{0}'.format(i),
+                           nn.Conv2d(nIn, nOut, kernel_size[i], stride[i], padding[i]))
+            if batchNormalization:
+                cnn.add_module('batchnorm{0}'.format(i), nn.BatchNorm2d(nOut, eps=0.001, momentum=0.99))
+            if activ.lower() == "leakyrelu":
+                cnn.add_module('relu{0}'.format(i),
+                               nn.LeakyReLU(0.2))
+            elif activ.lower() == "relu":
+                cnn.add_module('relu{0}'.format(i), nn.ReLU())
+            elif activ.lower() == "glu":
+                cnn.add_module('glu{0}'.format(i), GLU(nOut))
+            elif activ.lower() == "cg":
+                cnn.add_module('cg{0}'.format(i), ContextGating(nOut))
+            if dropout is not None:
+                cnn.add_module('dropout{0}'.format(i),
+                               nn.Dropout(dropout))
+
+        batch_norm = True
+        # 128x862x64
+        for i in range(len(nb_filters)):
+            conv(i, batch_norm, conv_dropout, activ=activation)
+            cnn.add_module('pooling{0}'.format(i), nn.AvgPool2d(pooling[i]))  # bs x tframe x mels
+
+        self.cnn = cnn
+
+    def load_state_dict(self, state_dict, strict=True):
+        self.cnn.load_state_dict(state_dict)
+
+    def state_dict(self, destination=None, prefix='', keep_vars=False):
+        return self.cnn.state_dict(destination=destination, prefix=prefix, keep_vars=keep_vars)
+
+    def save(self, filename):
+        torch.save(self.cnn.state_dict(), filename)
+
+    def forward(self, x):
+        # input size : (batch_size, n_channels, n_frames, n_freq)
+        # conv features
+        x = self.cnn(x)
+        return x

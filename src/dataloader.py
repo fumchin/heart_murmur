@@ -12,15 +12,29 @@ class PhonocardiogramDataset(Dataset):
     def __init__(self, features_dir):
         self.frame_length = cfg.frame_length
         self.features_dir = features_dir
-        self.features, self.position_list = self._get_features_file_list_and_labels(features_dir)
+        # self.features_file_list = None
+        self.features_file_list = glob(os.path.join(self.features_dir, '*.npy'))
+        self.features_file_list = [file for file in self.features_file_list if 'Phc' not in file]
+        # self.features, self.position_list = self._get_features_array_and_labels(features_dir)
 
     def __len__(self):
-        return len(self.position_list)
+        return len(self.features_file_list)
 
     def __getitem__(self, index):
-        return self.features[index, :, :, :], self.position_list[index]
 
-    def _get_features_file_list_and_labels(self, features_dir):
+        current_features_file = self.features_file_list[index]
+        features = np.load(current_features_file)[:, :self.frame_length]
+        features = features.T
+        features = np.reshape(features, (1, features.shape[0], features.shape[1]))
+
+
+        basename = os.path.splitext(os.path.basename(current_features_file))[0]
+        position = basename.split('_')[1]
+        return features, cfg.location_dict[position]
+        # return self.features[index, :, :, :], self.position_list[index]
+
+
+    def _get_features_array_and_labels(self, features_dir):
         features_file_list = glob(os.path.join(features_dir, '*.npy'))
         position_list = []
         features = None
@@ -40,8 +54,8 @@ class PhonocardiogramDataset(Dataset):
                 features = current_feature
             else:
                 features = np.vstack((features, current_feature))
-            # if count == 200:
-            #    break
+            if count == 200:
+                break
 
         print(features.shape)
         return features, position_list

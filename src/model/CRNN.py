@@ -3,8 +3,8 @@ import warnings
 import torch.nn as nn
 import torch
 
-from models.RNN import BidirectionalGRU
-from models.CNN import CNN
+from model.RNN import BidirectionalGRU
+from model.CNN import CNN
 
 import pdb
 
@@ -49,7 +49,7 @@ class CRNN(nn.Module):
             else:
                 self.dense_softmax = nn.Linear(n_RNN_cell, nclass)
             self.softmax = nn.Softmax(dim=-1) # attention over class axis, dim=-2 is attention over time axis
-
+        self.output = nn.Softmax(dim=1)  
 
     def load_cnn(self, state_dict):
         self.cnn.load_state_dict(state_dict)
@@ -108,7 +108,8 @@ class CRNN(nn.Module):
         else:
             weak = strong.mean(1)
         # pdb.set_trace()
-        return strong, weak
+        prediction = self.output(weak)
+        return prediction
 
 
 if __name__ == '__main__':

@@ -2,3 +2,4 @@ dataset/
 .vscode/
 src/stored_data/*
 src/loss.png
+*.png

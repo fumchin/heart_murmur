@@ -4,9 +4,12 @@ hop_length = 128
 frame_length = 628
 num_classes = 4
 location_dict = {'AV':0, 'MV':1, 'PV':2, 'TV':3}
+# location_reverse_dict = {'AV':0, 'MV':1, 'PV':2, 'TV':3}
+
 
 # training parameters =============================
-model_name = 'crnn_fpn_test'
+model_name = 'CRNN_test_1'
+model_type = 'CRNN'
 epochs = 100
 batch_size = 24
 learning_rate = 0.001
