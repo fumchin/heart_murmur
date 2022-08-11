@@ -23,7 +23,6 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
 
 
-LOSS_MIN = math.inf
 
 def preprocess(audio_file_list, saved_path, sr, mel_num, hop_length):
     for count, audio_file in enumerate(tqdm(audio_file_list)):
@@ -45,7 +44,8 @@ def create_data_loader(train_data, batch_size):
     return train_dataloader
 
 def train(model, train_dataloader, validation_dataloader, loss_fn, optimizer, device, epochs, checkpoint_path):
-    global LOSS_MIN
+    
+    loss_min = math.inf
     training_loss_list = []
     validation_loss_list = []
     epoch_list = []
@@ -64,14 +64,14 @@ def train(model, train_dataloader, validation_dataloader, loss_fn, optimizer, de
             'optimizer_state_dict': optimizer.state_dict(),
             }, os.path.join(checkpoint_path, f'checkpoint_epoch_{i}.pt'))
 
-        if training_loss < LOSS_MIN:
+        if training_loss < loss_min:
             torch.save({
             'epoch': i,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             }, os.path.join(checkpoint_path, f'best_model.pt'))
 
-            LOSS_MIN = training_loss
+            loss_min = training_loss
 
             output_txt = os.path.join(checkpoint_path, 'best.txt')
             with open(output_txt, 'w') as f:
@@ -83,12 +83,12 @@ def train(model, train_dataloader, validation_dataloader, loss_fn, optimizer, de
             # draw training & validation loss
             plt.plot(epoch_list, training_loss_list, 'b')
             plt.plot(epoch_list, validation_loss_list, 'r')
-            plt.savefig(f'{cfg.model_name}_loss.png')
+            plt.savefig(os.path.join(checkpoint_path, f'{cfg.model_name}_loss.png'))
 
     print("Finished training")
     plt.plot(epoch_list, training_loss_list, 'b')
     plt.plot(epoch_list, validation_loss_list, 'r')
-    plt.savefig(f'{cfg.model_name}_loss.png')
+    plt.savefig(os.path.join(checkpoint_path, f'{cfg.model_name}_loss.png'))
 
 
 
@@ -199,7 +199,7 @@ if __name__ == '__main__':
                 attention=True, activation="GLU", dropout=0.5, n_RNN_cell=128, n_layers_RNN=2,
                 pooling=[[2, 2], [2, 2], [1, 2], [1, 2], [1, 2], [1, 2], [1, 2]]).to(device)
     elif cfg.model_type == 'CRNN':
-        model = CRNN(1, cfg.num_classes, kernel_size=7 * [3], padding=7 * [1], stride=7 * [1], nb_filters=[16,  32,  64,  128,  128, 128, 128],
+        model_eval = CRNN(1, cfg.num_classes, kernel_size=7 * [3], padding=7 * [1], stride=7 * [1], nb_filters=[16,  32,  64,  128,  128, 128, 128],
             attention=True, activation="GLU", dropout=0.5, n_RNN_cell=128, n_layers_RNN=2,
             pooling=[[2, 2], [2, 2], [1, 2], [1, 2], [1, 2], [1, 2], [1, 2]]).to(device)
     
