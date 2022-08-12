@@ -11,6 +11,7 @@ import librosa, librosa.feature, librosa.util
 import numpy as np
 import math
 import matplotlib.pyplot as plt
+import matplotlib
 
 import os.path, os
 from glob import glob
@@ -22,6 +23,7 @@ from sklearn.metrics import confusion_matrix
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
 
+matplotlib.use('Agg')
 
 
 def preprocess(audio_file_list, saved_path, sr, mel_num, hop_length):
@@ -44,7 +46,7 @@ def create_data_loader(train_data, batch_size):
     return train_dataloader
 
 def train(model, train_dataloader, validation_dataloader, loss_fn, optimizer, device, epochs, checkpoint_path):
-    
+
     loss_min = math.inf
     training_loss_list = []
     validation_loss_list = []
@@ -183,7 +185,7 @@ if __name__ == '__main__':
         model = CRNN(1, 4, kernel_size=7 * [3], padding=7 * [1], stride=7 * [1], nb_filters=[16,  32,  64,  128,  128, 128, 128],
             attention=True, activation="GLU", dropout=0.5, n_RNN_cell=128, n_layers_RNN=2,
             pooling=[[2, 2], [2, 2], [1, 2], [1, 2], [1, 2], [1, 2], [1, 2]]).to(device)
-    
+
 
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.learning_rate, betas=(0.9, 0.999))
@@ -202,21 +204,21 @@ if __name__ == '__main__':
         model_eval = CRNN(1, cfg.num_classes, kernel_size=7 * [3], padding=7 * [1], stride=7 * [1], nb_filters=[16,  32,  64,  128,  128, 128, 128],
             attention=True, activation="GLU", dropout=0.5, n_RNN_cell=128, n_layers_RNN=2,
             pooling=[[2, 2], [2, 2], [1, 2], [1, 2], [1, 2], [1, 2], [1, 2]]).to(device)
-    
+
     best_checkpoint = torch.load(os.path.join(checkpoint_path, 'best_model.pt'))
     model_eval.load_state_dict(best_checkpoint['model_state_dict'])
     model_eval.eval()
-    
+
     pred_array = []
     ground_array = []
     with torch.no_grad():
         for count, (features, label) in enumerate(test_dataloader):
-            
+
             features = features.to(device)
             label = label.to(device)
             pred = model_eval(features)
             y_pred = torch.argmax(pred, dim=1)
-            
+
             if count == 0:
                 pred_array = y_pred.detach().cpu().numpy()
                 ground_array = label.cpu().numpy()
@@ -225,7 +227,7 @@ if __name__ == '__main__':
                 ground_array = np.concatenate((ground_array, label.cpu().numpy()), axis=None)
             # ground_array.append(label.cpu().numpy())
             # pred_array.append(y_pred.detach().cpu().numpy())
-    
-    print(confusion_matrix(ground_array, pred_array))  
+
+    print(confusion_matrix(ground_array, pred_array))
     print('end evaluation')
-            
+

@@ -8,8 +8,8 @@ location_dict = {'AV':0, 'MV':1, 'PV':2, 'TV':3}
 
 
 # training parameters =============================
-model_name = 'CRNN_lr001'
+model_name = 'CRNN_lr0001'
 model_type = 'CRNN'
 epochs = 200
 batch_size = 24
-learning_rate = 0.01
+learning_rate = 0.001
