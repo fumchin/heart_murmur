@@ -3,3 +3,6 @@ dataset/
 src/stored_data/*
 src/loss.png
 *.png
+*.pyc
+src/config.py
+src/__pycache__/config.cpython-38.pyc
