@@ -5,8 +5,6 @@ import torch
 
 from model.RNN import BidirectionalGRU
 from model.CNN import CNN
-# from RNN import BidirectionalGRU
-# from CNN import CNN
 
 import pdb
 
@@ -52,11 +50,6 @@ class CRNN(nn.Module):
                 self.dense_softmax = nn.Linear(n_RNN_cell, nclass)
             self.softmax = nn.Softmax(dim=-1) # attention over class axis, dim=-2 is attention over time axis
         self.output = nn.Softmax(dim=1)  
-        self.fc1 = nn.Linear(471,64)
-        self.fc2 = nn.Linear(64, 24)
-        self.fc3 = nn.Linear(24, 3)
-        self.flatten = nn.Flatten(1)
-        self.dropout_2 = nn.Dropout(p=0.5)
 
     def load_cnn(self, state_dict):
         self.cnn.load_state_dict(state_dict)
@@ -68,23 +61,15 @@ class CRNN(nn.Module):
         self.cnn.load_state_dict(state_dict["cnn"])
         self.rnn.load_state_dict(state_dict["rnn"])
         self.dense.load_state_dict(state_dict["dense"])
-        self.fc1.load_state_dict(state_dict["fc1"])
-        self.fc2.load_state_dict(state_dict["fc2"])
-        self.fc3.load_state_dict(state_dict["fc3"])
 
     def state_dict(self, destination=None, prefix='', keep_vars=False):
         state_dict = {"cnn": self.cnn.state_dict(destination=destination, prefix=prefix, keep_vars=keep_vars),
                       "rnn": self.rnn.state_dict(destination=destination, prefix=prefix, keep_vars=keep_vars),
-                      'dense': self.dense.state_dict(destination=destination, prefix=prefix, keep_vars=keep_vars),
-                      'fc1': self.fc1.state_dict(destination=destination, prefix=prefix, keep_vars=keep_vars),
-                      'fc2': self.fc2.state_dict(destination=destination, prefix=prefix, keep_vars=keep_vars),
-                      'fc3': self.fc3.state_dict(destination=destination, prefix=prefix, keep_vars=keep_vars)
-                      }
+                      'dense': self.dense.state_dict(destination=destination, prefix=prefix, keep_vars=keep_vars)}
         return state_dict
 
     def save(self, filename):
-        parameters = {'cnn': self.cnn.state_dict(), 'rnn': self.rnn.state_dict(), 'dense': self.dense.state_dict(),
-                      'fc1': self.fc1.state_dict(),'fc2': self.fc2.state_dict(), 'fc3': self.fc3.state_dict()}
+        parameters = {'cnn': self.cnn.state_dict(), 'rnn': self.rnn.state_dict(), 'dense': self.dense.state_dict()}
         torch.save(parameters, filename)
 
     def forward(self, x):
@@ -111,29 +96,20 @@ class CRNN(nn.Module):
         if self.rnn_type == 'BGRU':
             x = self.rnn(x)
 
-        x = self.dropout(x) # 156*255
-        # strong = self.dense(x)  # [bs, frames, nclass]
-        x = self.dense(x)  # [bs, frames, nclass]
-        x = self.flatten(x)
-        x = self.fc1(x)
-        x = self.dropout_2(x)
-        x = self.fc2(x)
-        x = self.fc3(x)
-        
-        
-        # strong = self.sigmoid(strong)
-        # if self.attention:
-        #     sof = self.dense_softmax(x)  # [bs, frames, nclass]
-        #     sof = self.softmax(sof)
-        #     sof = torch.clamp(sof, min=1e-7, max=1)
-        #     weak = (strong * sof).sum(1) / sof.sum(1)   # [bs, nclass]
-        #     # weak = (strong * strong).sum(1) / strong.sum(1)   # [bs, nclass]
-        # else:
-        #     weak = strong.mean(1)
-        # # pdb.set_trace()
-        # # prediction = self.output(weak)
-        # prediction = weak
-        return x
+        x = self.dropout(x)
+        strong = self.dense(x)  # [bs, frames, nclass]
+        strong = self.sigmoid(strong)
+        if self.attention:
+            sof = self.dense_softmax(x)  # [bs, frames, nclass]
+            sof = self.softmax(sof)
+            sof = torch.clamp(sof, min=1e-7, max=1)
+            weak = (strong * sof).sum(1) / sof.sum(1)   # [bs, nclass]
+            # weak = (strong * strong).sum(1) / strong.sum(1)   # [bs, nclass]
+        else:
+            weak = strong.mean(1)
+        # pdb.set_trace()
+        prediction = self.output(weak)
+        return prediction
 
 
 if __name__ == '__main__':
