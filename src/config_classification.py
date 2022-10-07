@@ -14,8 +14,8 @@ adapt_learning_rate = False
 
 
 # training parameters =============================
-model_name = 'CRNN_lr0001_0930_1733'
+model_name = 'CRNN_lr0001_1007_0418'
 model_type = 'CRNN'
 epochs = 200
-batch_size = 48
-learning_rate = 0.001
+batch_size = 12
+learning_rate = 0.0001

@@ -52,9 +52,9 @@ class CRNN(nn.Module):
                 self.dense_softmax = nn.Linear(n_RNN_cell, nclass)
             self.softmax = nn.Softmax(dim=-1) # attention over class axis, dim=-2 is attention over time axis
         self.output = nn.Softmax(dim=1)  
-        self.fc1 = nn.Linear(471,64)
-        self.fc2 = nn.Linear(64, 24)
-        self.fc3 = nn.Linear(24, 3)
+        self.fc1 = nn.Linear(471,128)
+        self.fc2 = nn.Linear(128, 32)
+        self.fc3 = nn.Linear(32, 3)
         self.flatten = nn.Flatten(1)
         self.dropout_2 = nn.Dropout(p=0.5)
 
@@ -112,22 +112,34 @@ class CRNN(nn.Module):
             x = self.rnn(x)
 
         x = self.dropout(x) # 156*255
+
         # strong = self.dense(x)  # [bs, frames, nclass]
         x = self.dense(x)  # [bs, frames, nclass]
+        # x = self.sigmoid(x)
         x = self.flatten(x)
         x = self.fc1(x)
         x = self.dropout_2(x)
         x = self.fc2(x)
+        x = self.dropout_2(x)
         x = self.fc3(x)
+        x = self.dropout_2(x)
+        # x = self.softmax(x)
         
         
         # strong = self.sigmoid(strong)
         # if self.attention:
-        #     sof = self.dense_softmax(x)  # [bs, frames, nclass]
-        #     sof = self.softmax(sof)
-        #     sof = torch.clamp(sof, min=1e-7, max=1)
-        #     weak = (strong * sof).sum(1) / sof.sum(1)   # [bs, nclass]
-        #     # weak = (strong * strong).sum(1) / strong.sum(1)   # [bs, nclass]
+        #     x = self.dense_softmax(x)  # [bs, frames, nclass]
+        #     x = self.flatten(x)
+        #     x = self.fc1(x)
+        #     x = self.dropout_2(x)
+        #     x = self.fc2(x)
+        #     x = self.dropout_2(x)
+        #     x = self.fc3(x)
+        #     x = self.softmax(x)
+            # sof = self.softmax(sof)
+            # sof = torch.clamp(sof, min=1e-7, max=1)
+            # weak = (strong * sof).sum(1) / sof.sum(1)   # [bs, nclass]
+            # weak = (strong * strong).sum(1) / strong.sum(1)   # [bs, nclass]
         # else:
         #     weak = strong.mean(1)
         # # pdb.set_trace()

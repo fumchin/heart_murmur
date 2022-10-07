@@ -1,3 +1,4 @@
+from importlib.metadata import PathDistribution
 from model.CNN_test import Cnn_Test
 from model.CRNN_FPN import CRNN_fpn
 from model.CRNN import CRNN
@@ -60,7 +61,7 @@ def change_learning_rate(optimizer, epochs):
     pass
 def train(model, train_dataloader, validation_dataloader, loss_fn, optimizer, device, epochs, checkpoint_path):
 
-    loss_min = math.inf
+    val_loss_min = math.inf
     f1_max = 0
     training_loss_list = []
     validation_loss_list = []
@@ -73,13 +74,13 @@ def train(model, train_dataloader, validation_dataloader, loss_fn, optimizer, de
         # change learning rate
         if cfg.adapt_learning_rate == True:
             change_learning_rate(optimizer, epochs)
-        training_loss, validation_loss, train_f1_score, val_f1_score = train_single_epoch(model, train_dataloader, validation_dataloader, loss_fn, optimizer, device)
+        training_loss, validation_loss = train_single_epoch(model, train_dataloader, validation_dataloader, loss_fn, optimizer, device)
 
         training_loss_list.append(training_loss)
         validation_loss_list.append(validation_loss)
         
-        training_f1_list.append(train_f1_score)
-        validation_f1_list.append(val_f1_score)
+        # training_f1_list.append(train_f1_score)
+        # validation_f1_list.append(val_f1_score)
         
         model.train()
         torch.save({
@@ -89,7 +90,7 @@ def train(model, train_dataloader, validation_dataloader, loss_fn, optimizer, de
             }, os.path.join(checkpoint_path, f'checkpoint_epoch_{i}.pt'))
 
         # if validation_loss < loss_min:
-        if val_f1_score > f1_max:
+        if validation_loss < val_loss_min:
             torch.save({
             'epoch': i,
             'model_state_dict': model.state_dict(),
@@ -97,14 +98,14 @@ def train(model, train_dataloader, validation_dataloader, loss_fn, optimizer, de
             }, os.path.join(checkpoint_path, f'best_model.pt'))
 
             # loss_min = validation_loss
-            f1_max = val_f1_score
+            val_loss_min = validation_loss
 
             output_txt = os.path.join(checkpoint_path, 'best.txt')
             with open(output_txt, 'w') as f:
                 f.write(f'training_loss: {training_loss}\n')
                 f.write(f'validation_loss: {validation_loss}\n')
-                f.write(f'training_f1: {train_f1_score}\n')
-                f.write(f'validation_f1: {val_f1_score}\n')
+                # f.write(f'training_f1: {train_f1_score}\n')
+                # f.write(f'validation_f1: {val_f1_score}\n')
                 f.write(f'epoch: {i}\n')
 
         print("---------------------------")
@@ -112,53 +113,61 @@ def train(model, train_dataloader, validation_dataloader, loss_fn, optimizer, de
             # draw training & validation loss
             plt.figure(1)
             plt.grid()
-            plt.xlim(0, 200, 1)
+            # plt.xlim(0, 200, 1)
             plt.plot(epoch_list, training_loss_list, 'b')
             plt.plot(epoch_list, validation_loss_list, 'r')
             plt.savefig(os.path.join(checkpoint_path, f'{cfg.model_name}_loss.png'))
             
-            plt.figure(2)
-            plt.grid()
-            plt.xlim(0, 200, 1)
-            plt.plot(epoch_list, training_f1_list, 'b')
-            plt.plot(epoch_list, validation_f1_list, 'r')
-            plt.savefig(os.path.join(checkpoint_path, f'{cfg.model_name}_f1.png'))
+            # plt.figure(2)
+            # plt.grid()
+            # # plt.xlim(0, 200, 1)
+            # plt.plot(epoch_list, training_f1_list, 'b')
+            # # plt.plot(epoch_list, validation_f1_list, 'r')
+            # plt.savefig(os.path.join(checkpoint_path, f'{cfg.model_name}_f1.png'))
 
     print("Finished training")
     plt.figure(1)
+    plt.grid()
     plt.plot(epoch_list, training_loss_list, 'b')
     plt.plot(epoch_list, validation_loss_list, 'r')
     plt.savefig(os.path.join(checkpoint_path, f'{cfg.model_name}_loss.png'))
 
-    plt.figure(2)
-    plt.plot(epoch_list, training_f1_list, 'b')
-    plt.plot(epoch_list, validation_f1_list, 'r')
-    plt.savefig(os.path.join(checkpoint_path, f'{cfg.model_name}_f1.png'))
+    # plt.figure(2)
+    # plt.grid()
+    # plt.plot(epoch_list, training_f1_list, 'b')
+    # # plt.plot(epoch_list, validation_f1_list, 'r')
+    # plt.savefig(os.path.join(checkpoint_path, f'{cfg.model_name}_f1.png'))
 
 
 
 def train_single_epoch(model, train_dataloader, validation_dataloader, loss_fn, optimizer, device):
     
+    training_seg_loss = 0
+    training_patient_loss = 0
     training_loss = 0
     
     pred_array = []
     ground_array = []
+    weight = torch.Tensor([1, 5, 3]).to(device)
     model.train()
-    for count, (input, target) in enumerate(train_dataloader):
-        
+    patient_target_dict = {}
+    patient_pred_dict = {}
+    for count, (input, target, patient_id_list) in enumerate(train_dataloader):
         input, target = input.to(device), target.to(device)
-        
         # calculate loss
         prediction = model(input)
+        target_onehot = nn.functional.one_hot(target, num_classes=cfg.num_classes)
         y_pred = torch.argmax(prediction, dim=1)
         # print('input: ', input)
         # print('target: ', target)
         # print('prediction: ', prediction)
-        loss = loss_fn(prediction, target)
-        training_loss += loss.item()
-        # backpropagate error and update weights
+        # loss_seg = loss_fn(prediction, target_onehot.float())
+        # loss_seg = loss_seg * weight
+        # loss_seg = loss_seg.mean()
+        loss_seg = loss_fn(prediction, target)
+        training_seg_loss += loss_seg.item()
         optimizer.zero_grad()
-        loss.backward()
+        loss_seg.backward()
         optimizer.step()
         
         if count == 0:
@@ -167,33 +176,110 @@ def train_single_epoch(model, train_dataloader, validation_dataloader, loss_fn, 
         else:
             pred_array = np.concatenate((pred_array, y_pred.detach().cpu().numpy()), axis=None)
             ground_array = np.concatenate((ground_array, target.cpu().numpy()), axis=None)
+        # put into list
         
-    training_loss = training_loss / len(train_dataloader)
+        
+    
+        
+    
+    # train_f1_score = f1_score(ground_array, pred_array, average='macro')
+    patient_train_loss = 0
+    patient_id_batch_list = []
+    for count, (input, target, patient_id_list) in enumerate(train_dataloader):
+        
+        input, target = input.to(device), target.to(device)
+        target_onehot = nn.functional.one_hot(target, num_classes=cfg.num_classes)
+        prediction = model(input)
+        for patient_count, patient_id in enumerate(patient_id_list):
+            patient_target_dict[patient_id] = target[patient_count]
+            try:
+                patient_pred_dict[patient_id] = torch.add(patient_pred_dict[patient_id], prediction[patient_count])
+            except:
+                patient_pred_dict[patient_id] = prediction[patient_count]
+                patient_id_batch_list.append(patient_id)
+        if ((count + 1) % 5 == 0 ) or (count+1) == len(train_dataloader):
+            for patient_count, patient_id in enumerate(patient_id_batch_list):
+                if patient_count == 0:
+                    patient_train_loss = loss_fn(patient_pred_dict[patient_id], patient_target_dict[patient_id])
+                else:
+                    patient_train_loss = patient_train_loss + loss_fn(patient_pred_dict[patient_id], patient_target_dict[patient_id])
+            # training_patient_loss += patient_train_loss.mean().item()
+            # patient_train_loss = nn.Softmax.apply(patient_train_loss)
+            # patient_train_loss = patient_train_loss * weight
+            # patient_train_loss = patient_train_loss.mean()
+            training_patient_loss += patient_train_loss.item()
+            optimizer.zero_grad()
+            patient_train_loss.backward()
+            optimizer.step()
+            
+            patient_id_batch_list = []
+            patient_pred_dict = {}
+            patient_target_dict = {}
+            patient_train_loss = 0
+                
+                
+
+    
+    training_loss = (training_patient_loss) / len(train_dataloader)
     # print(ABSENT_COUNT, PRESENT_COUNT, UNKNOWN_COUNT)
     print(f"loss: {training_loss}")
-    train_f1_score = f1_score(ground_array, pred_array, average='macro')
-    
+        
     model.eval()
     validation_loss = 0
     pred_array_val = []
     ground_array_val = []
+    patient_val_loss = 0
+    patient_id_batch_list = []
+    patient_pred_dict = {}
+    patient_target_dict = {}
     with torch.no_grad():
-        for count, (features, label) in enumerate(validation_dataloader):
-        # for count, (features, label) in enumerate(train_dataloader):
+        for count, (input, target, patient_id_list) in enumerate(validation_dataloader):
+            
+            input, target = input.to(device), target.to(device)
+            target_onehot = nn.functional.one_hot(target, num_classes=cfg.num_classes)
+            prediction = model(input)
+            for patient_count, patient_id in enumerate(patient_id_list):
+                patient_target_dict[patient_id] = target[patient_count]
+                try:
+                    patient_pred_dict[patient_id] = torch.add(patient_pred_dict[patient_id], prediction[patient_count])
+                except:
+                    patient_pred_dict[patient_id] = prediction[patient_count]
+                    patient_id_batch_list.append(patient_id)
+            if ((count + 1) % cfg.batch_size == 0 ) or (count+1) == len(validation_dataloader):
+                for patient_count, patient_id in enumerate(patient_id_batch_list):
+                    if patient_count == 0:
+                        patient_val_loss = loss_fn(patient_pred_dict[patient_id], patient_target_dict[patient_id])
+                    else:
+                        patient_val_loss = patient_val_loss + loss_fn(patient_pred_dict[patient_id], patient_target_dict[patient_id])
+                # training_patient_loss += patient_train_loss.mean().item()
+                # patient_val_loss = patient_val_loss * weight
+                # patient_val_loss = patient_val_loss.mean()
+                validation_loss += patient_val_loss.item()
+                
+                patient_id_batch_list = []
+                patient_pred_dict = {}
+                patient_target_dict = {}
+                patient_val_loss = 0
+        # for count, (features, label, patient_id_list) in enumerate(validation_dataloader):
+        # # for count, (features, label) in enumerate(train_dataloader):
 
-            features = features.to(device)
-            label = label.to(device)
-            pred = model(features)
-            y_pred = torch.argmax(pred, dim=1)
-            val_loss = loss_fn(pred, label)
-            validation_loss += val_loss.item()
+        #     features = features.to(device)
+        #     label = label.to(device)
+        #     label_onehot = nn.functional.one_hot(label, num_classes=cfg.num_classes)
+        #     pred = model(features)
+        #     y_pred = torch.argmax(pred, dim=1)
+           
+        #     val_loss = loss_fn(pred, label_onehot.float())
+        #     val_loss = val_loss * weight
+        #     val_loss = val_loss.mean()
+        #     validation_loss += val_loss.item()
 
-            if count == 0:
-                pred_array_val = y_pred.detach().cpu().numpy()
-                ground_array_val = label.cpu().numpy()
-            else:
-                pred_array_val = np.concatenate((pred_array_val, y_pred.detach().cpu().numpy()), axis=None)
-                ground_array_val = np.concatenate((ground_array_val, label.cpu().numpy()), axis=None)
+        #     if count == 0:
+        #         pred_array_val = y_pred.detach().cpu().numpy()
+        #         ground_array_val = label.cpu().numpy()
+        #     else:
+        #         pred_array_val = np.concatenate((pred_array_val, y_pred.detach().cpu().numpy()), axis=None)
+        #         ground_array_val = np.concatenate((ground_array_val, label.cpu().numpy()), axis=None)
     
     # for count,(input, target) in enumerate(validation_dataloader):
     #     input, target = input.to(device), target.to(device)
@@ -213,11 +299,11 @@ def train_single_epoch(model, train_dataloader, validation_dataloader, loss_fn, 
             
     validation_loss = validation_loss / len(validation_dataloader)
     print(f"val_loss: {validation_loss}")
-    val_f1_score = f1_score(ground_array_val, pred_array_val, average='macro')
-    print('f1 score: ' + str(val_f1_score))
-    print(confusion_matrix(ground_array_val, pred_array_val))
+    # val_f1_score = f1_score(ground_array_val, pred_array_val, average='macro')
+    # print('f1 score: ' + str(val_f1_score))
+    # print(confusion_matrix(ground_array_val, pred_array_val))
 
-    return training_loss, validation_loss, train_f1_score, val_f1_score
+    return training_loss, validation_loss
 
 
 
@@ -227,7 +313,7 @@ if __name__ == '__main__':
     dataset_name = 'the-circor-digiscope-phonocardiogram-dataset-1.0.3'
     data_path = os.path.join('..', 'dataset', dataset_name, 'training_data')
     audio_file_list = glob(os.path.join(data_path, '*.wav'))
-    preprocess_path = os.path.join('..', 'dataset', dataset_name, 'preprocess_10sec')
+    preprocess_path = os.path.join('..', 'dataset', dataset_name, 'training_preprocess')
 
 
 
@@ -252,7 +338,7 @@ if __name__ == '__main__':
         device = "cpu"
 
     dataset = PhonocardiogramDataset(preprocess_path, data_path)
-    train_size = int(len(dataset) * 0.8)
+    train_size = int(len(dataset) * 0.95)
     test_size = len(dataset) - train_size
     torch.manual_seed(1)
     train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size])
@@ -281,7 +367,7 @@ if __name__ == '__main__':
 
 
     loss_fn = nn.CrossEntropyLoss()
-    # loss_fn = nn.BCELoss()
+    # loss_fn = nn.BCEWithLogitsLoss(reduction='none')
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.learning_rate, betas=(0.9, 0.999))
     model.train()
     train(model=model, train_dataloader=train_dataloader, validation_dataloader=test_dataloader, loss_fn=loss_fn, optimizer=optimizer, device=device, epochs=cfg.epochs, checkpoint_path=checkpoint_path)

@@ -51,7 +51,7 @@ class PhonocardiogramDataset(Dataset):
                         murmur = 2
                     break
         # print(cfg.murmur_dict[murmur])
-        return features, murmur
+        return features, murmur, patient_id
 
 
     def _get_features_array_and_labels(self, features_dir):

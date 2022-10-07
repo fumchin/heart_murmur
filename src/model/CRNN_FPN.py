@@ -59,6 +59,11 @@ class CRNN_fpn(nn.Module):
         self.conv1x1_2 = nn.Conv2d(512,256,1) # for x_2
         self.conv1x1_4 = nn.Conv2d(512,256,1) # for x
         self.output = nn.Softmax(dim=1)
+        self.fc1 = nn.Linear(471,64)
+        self.fc2 = nn.Linear(64, 24)
+        self.fc3 = nn.Linear(24, 3)
+        self.flatten = nn.Flatten(1)
+        self.dropout_2 = nn.Dropout(p=0.3)
 
     def forward(self, x):
         # input size : (batch_size, n_channels, n_frames, n_freq)
@@ -106,17 +111,22 @@ class CRNN_fpn(nn.Module):
 
         # x = self.flatten(x)
         
-        
-        strong = self.dense(x)  # [bs, frames, nclass]
-        strong = self.sigmoid(strong)
-        if self.attention:
-            sof = self.dense_softmax(x)  # [bs, frames, nclass]
-            sof = self.softmax(sof)
-            sof = torch.clamp(sof, min=1e-7, max=1)
-            weak = (strong * sof).sum(1) / sof.sum(1)   # [bs, nclass]
-        else:
-            weak = strong.mean(1)
-        output = self.softmax(weak)
+        x = self.dense(x)  # [bs, frames, nclass]
+        x = self.flatten(x)
+        x = self.fc1(x)
+        x = self.dropout_2(x)
+        x = self.fc2(x)
+        x = self.fc3(x)
+        # strong = self.dense(x)  # [bs, frames, nclass]
+        # strong = self.sigmoid(strong)
+        # if self.attention:
+        #     sof = self.dense_softmax(x)  # [bs, frames, nclass]
+        #     sof = self.softmax(sof)
+        #     sof = torch.clamp(sof, min=1e-7, max=1)
+        #     weak = (strong * sof).sum(1) / sof.sum(1)   # [bs, nclass]
+        # else:
+        #     weak = strong.mean(1)
+        # output = self.softmax(weak)
         # uncomment this part only at inference stage without ensemble
         # for training stage or inference stage with ensemble, you should remain comment
         '''
@@ -125,7 +135,7 @@ class CRNN_fpn(nn.Module):
         strong = strong * check
         '''
         
-        return output
+        return x
 
 
 if __name__ == '__main__':

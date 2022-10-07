@@ -32,7 +32,7 @@ class Cnn_Test(nn.Module):
         self.relu5 = nn.ReLU() # activation
         self.fc2 = nn.Linear(512, 3)
         self.dropout = nn.Dropout(p=0.2)
-        # self.output = nn.Softmax(dim=1)
+        self.output = nn.Softmax(dim=1)
 
     def forward(self, input):
         x = self.conv1(input)
@@ -51,8 +51,8 @@ class Cnn_Test(nn.Module):
         x = self.fc1(x) # Linear function (readout)
         x = self.dropout(x)
         x = self.fc2(x)
-        predictions = x
-        return predictions
+        # predictions = self.output(x)
+        return x
 
 if __name__ == '__main__':
     model = Cnn_Test()
